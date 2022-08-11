@@ -8,27 +8,17 @@
 
 Base64 是一种基于64个可打印字符来表示二进制数据的表示方法。转换的时候，将3字节的数据，先后放入一个24位的缓冲区中，先来的字节占高位。数据不足3字节的话，于缓冲器中剩下的比特用0补足。每次取出6比特（因为 ![{\displaystyle 2^{6}=64}](https://wikimedia.org/api/rest_v1/media/math/render/svg/c4becc8d811901597b9807eccff60f0897e3701a)），按照其值选择`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ `中的字符作为编码后的输出，直到全部输入数据转换完成。
 
-
-
-
-
 通常而言 Base64 的识别特征为索引表，当我们能找到 `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ ` 这样索引表，再经过简单的分析基本就能判定是 Base64 编码。
-
-![](http://ob2hrvcxg.bkt.clouddn.com/20180822140744.png)
-
-
 
 当然，有些题目 base64 的索引表是会变的，一些变种的 base64 主要 就是修改了这个索引表。
 
+## TEA 系列算法
 
+在标准 Tea 系列算法中其最主要的识别特征就是拥有一个 magic number ：`0x9E3779B9`。在IDA中，也可能出现其补码形式： `0x61C88647`。
 
-
-
-## Tea
+### TEA
 
 在[密码学](https://zh.wikipedia.org/wiki/%E5%AF%86%E7%A0%81%E5%AD%A6)中，**微型加密算法**（Tiny Encryption Algorithm，TEA）是一种易于描述和[执行](https://zh.wikipedia.org/w/index.php?title=%E6%89%A7%E8%A1%8C&action=edit&redlink=1)的[块密码](https://zh.wikipedia.org/wiki/%E5%A1%8A%E5%AF%86%E7%A2%BC)，通常只需要很少的代码就可实现。其设计者是[剑桥大学计算机实验室](https://zh.wikipedia.org/wiki/%E5%89%91%E6%A1%A5%E5%A4%A7%E5%AD%A6)的[大卫·惠勒](https://zh.wikipedia.org/w/index.php?title=%E5%A4%A7%E5%8D%AB%C2%B7%E6%83%A0%E5%8B%92&action=edit&redlink=1)与[罗杰·尼达姆](https://zh.wikipedia.org/w/index.php?title=%E7%BD%97%E6%9D%B0%C2%B7%E5%B0%BC%E8%BE%BE%E5%A7%86&action=edit&redlink=1)。
-
-
 
 参考代码：
 
@@ -60,19 +50,89 @@ void decrypt (uint32_t* v, uint32_t* k) {
 }
 ```
 
+当然，这 Tea 算法也有魔改的，感兴趣的可以看 2018 0ctf Quals milk-tea。
 
+### XTEA
 
-在 Tea 算法中其最主要的识别特征就是 拥有一个 magic number ：0x9e3779b9 。当然，这 Tea 算法也有魔改的，感兴趣的可以看 2018 0ctf Quals milk-tea。
+在[密码学](https://zh.wikipedia.org/wiki/%E5%AF%86%E7%A2%BC%E5%AD%B8)中，**XTEA** ( eXtended TEA )是和TEA一样的64位块大小的 [Feistel 密码](https://zh.wikipedia.org/wiki/%E8%B4%B9%E6%96%AF%E5%A6%A5%E5%AF%86%E7%A0%81)，具有 128 位密钥，建议轮数为 64 轮。该密码的设计者是[剑桥大学计算机实验室](https://zh.wikipedia.org/wiki/%E5%89%91%E6%A1%A5%E5%A4%A7%E5%AD%A6)的[大卫·惠勒](https://zh.wikipedia.org/w/index.php?title=%E5%A4%A7%E5%8D%AB%C2%B7%E6%83%A0%E5%8B%92&action=edit&redlink=1)与[罗杰·尼达姆](https://zh.wikipedia.org/w/index.php?title=%E7%BD%97%E6%9D%B0%C2%B7%E5%B0%BC%E8%BE%BE%E5%A7%86&action=edit&redlink=1)，旨在纠正TEA中的弱点，相比TEA有了更加复杂的[密钥调度](https://en.wikipedia.org/wiki/Key_schedule)以及移位、异或、加法的重新排列。
 
+参考代码：
+```c
+#include <stdint.h>
 
+const uint32_t delta = 0x9E3779B9;
 
+void encrypt(uint32_t int rounds, uint32_t value[2], uint32_t const key[4]) {
+    uint32_t l = value[0], r = value[1], sum=0;
+    for (uint32_t i = 0; i < rounds; i++) {
+        l += (((r << 4) ^ (r >> 5)) + r) ^ (sum + key[sum & 3]);
+        sum += delta;
+        r += (((l << 4) ^ (l >> 5)) + l) ^ (sum + key[(sum >> 11) & 3]);
+    }
+    value[0] = l; value[1] = r;
+}
 
+void decrypt(uint32_t int rounds, uint32_t v[2], uint32_t const key[4]) {
+    uint32_t l = value[0], r = value[1], sum=delta * rounds;
+    for (uint32_t i = 0; i < rounds; i++) {
+        r -= (((l << 4) ^ (l >> 5)) + l) ^ (sum + key[(sum>>11) & 3]);
+        sum -= delta;
+        l -= (((r << 4) ^ (r >> 5)) + r) ^ (sum + key[sum & 3]);
+    }
+    value[0]=l; value[1]=r;
+}
+```
+
+### XXTEA
+
+在[密码学](https://zh.wikipedia.org/wiki/%E5%AF%86%E7%A2%BC%E5%AD%B8)中，**XXTEA** ( Corrected Block TEA )是一种不平衡 [Feistel](https://zh.wikipedia.org/wiki/%E8%B4%B9%E6%96%AF%E5%A6%A5%E5%AF%86%E7%A0%81) 分组密码，旨在改进XTEA算法的弱点。该密码的设计者是[剑桥大学计算机实验室](https://zh.wikipedia.org/wiki/%E5%89%91%E6%A1%A5%E5%A4%A7%E5%AD%A6)的[大卫·惠勒](https://zh.wikipedia.org/w/index.php?title=%E5%A4%A7%E5%8D%AB%C2%B7%E6%83%A0%E5%8B%92&action=edit&redlink=1)与[罗杰·尼达姆](https://zh.wikipedia.org/w/index.php?title=%E7%BD%97%E6%9D%B0%C2%B7%E5%B0%BC%E8%BE%BE%E5%A7%86&action=edit&redlink=1)。XXTEA 对长度为 32 位的任意倍数（最少 64 位）的可变长度块进行操作。
+
+参考代码：
+```c
+#include <stdint.h>
+
+const uint32_t delta = 0x9E3779B9; 
+
+#define MX ((z >> 5 ^ y << 2) + (y >> 3 ^ z << 4) ^ (sum ^ y) + (key[e ^ p & 3] ^ z))
+
+void encrypt(uint32_t* value, uint32_t n, uint32_t key[4])
+{
+    uint32_t sum = 0, q = 6 + 52 / n, y = 0, z = value[n - 1], e = 0, p = 0;
+    while(q--)
+    {
+        sum += delta;
+        e = (sum >> 2) & 3;
+        for(p = 0; p < n - 1; ++p)
+        {
+            y = value[p + 1];
+            z = value[p] += MX;
+        }
+        y = value[0];
+        z = value[n - 1] += MX;
+    }
+}
+
+void decrypt(uint32_t* value, uint32_t n, uint32_t key[4])
+{
+    uint32_t q = 6 + 52 / n, sum = q * delta, y = value[0], z = value[n - 1], e = 0, p = 0;
+    while(sum)
+    {
+        e = (sum >> 2) & 3;
+        for(p = n - 1; p > 0; --p)
+        {
+            z = value[p - 1];
+            y = value[p] -= MX;
+        }
+        z = value[n - 1];
+        y = value[0] -= MX;
+        sum -= delta;
+    }
+}
+```
 
 ## RC4
 
 在[密码学](https://zh.wikipedia.org/wiki/%E5%AF%86%E7%A2%BC%E5%AD%B8)中，**RC4**（来自Rivest Cipher 4的缩写）是一种[流加密](https://zh.wikipedia.org/wiki/%E6%B5%81%E5%8A%A0%E5%AF%86)算法，[密钥](https://zh.wikipedia.org/wiki/%E5%AF%86%E9%92%A5)长度可变。它加解密使用相同的密钥，因此也属于[对称加密算法](https://zh.wikipedia.org/wiki/%E5%AF%B9%E7%A7%B0%E5%8A%A0%E5%AF%86)。RC4是[有线等效加密](https://zh.wikipedia.org/wiki/%E6%9C%89%E7%B7%9A%E7%AD%89%E6%95%88%E5%8A%A0%E5%AF%86)（WEP）中采用的加密算法，也曾经是[TLS](https://zh.wikipedia.org/wiki/%E4%BC%A0%E8%BE%93%E5%B1%82%E5%AE%89%E5%85%A8%E5%8D%8F%E8%AE%AE)可采用的算法之一。
-
-
 
 ```C
 void rc4_init(unsigned char *s, unsigned char *key, unsigned long Len) //初始化函数
